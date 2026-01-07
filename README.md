@@ -218,13 +218,4 @@ A: 当前是 **录音后转写**；可扩展为 WebSocket / Streaming（后续�
 
 Internal / Demo / Research Use
 
----
 
-如果你愿意，下一步我可以直接帮你补：
-
-* ✅ **“实时语音 → 边说边出字” WebSocket 版 README**
-* ✅ **Linux + Docker + GPU 部署 README**
-* ✅ **“语音提问 → LLM → TTS 回答” 的整体架构说明**
-
-你只要说一句：
-👉 **“README 再加一节 XXX”**
