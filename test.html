@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>STT 前端测试页</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "PingFang SC", "Microsoft YaHei"; max-width: 900px; margin: 24px auto; }
+    button { padding: 10px 14px; margin-right: 8px; }
+    .row { margin: 12px 0; display:flex; gap:12px; align-items:center; flex-wrap: wrap; }
+    textarea { width: 100%; padding: 12px; box-sizing: border-box; }
+    .muted { color:#666; font-size: 14px; }
+    input[type="text"] { padding: 8px; width: 360px; }
+    label { font-size: 14px; color:#333; }
+  </style>
+</head>
+<body>
+  <h2>Web 端语音转文字（调用你的 /transcribe API）</h2>
+  <p class="muted">流程：开始录音 → 停止 → 上传到后端 → 返回文本。</p>
+
+  <div class="row">
+    <label>API 地址：</label>
+    <input id="apiBase" type="text" value="http://localhost:8000" />
+    <label>language：</label>
+    <input id="lang" type="text" value="zh" style="width:80px"/>
+    <label><input id="timestamps" type="checkbox" /> 返回时间戳</label>
+    <label><input id="vad" type="checkbox" checked /> VAD</label>
+  </div>
+
+  <div class="row">
+    <button id="btnStart">开始录音</button>
+    <button id="btnStop" disabled>停止录音</button>
+    <button id="btnUpload" disabled>上传转写</button>
+    <span id="status" class="muted"></span>
+  </div>
+
+  <h3>录音预览</h3>
+  <audio id="player" controls></audio>
+
+  <h3>转写结果</h3>
+  <textarea id="result" rows="10" placeholder="这里显示转写文本..."></textarea>
+
+  <script>
+    let mediaRecorder;
+    let chunks = [];
+    let blob;
+
+    const $ = (id) => document.getElementById(id);
+    const btnStart = $("btnStart");
+    const btnStop = $("btnStop");
+    const btnUpload = $("btnUpload");
+    const status = $("status");
+    const player = $("player");
+    const result = $("result");
+
+    btnStart.onclick = async () => {
+      result.value = "";
+      status.textContent = "申请麦克风权限...";
+      chunks = [];
+      blob = null;
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+
+      mediaRecorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+      mediaRecorder.onstop = () => {
+        blob = new Blob(chunks, { type: mimeType });
+        player.src = URL.createObjectURL(blob);
+        btnUpload.disabled = false;
+        status.textContent = "录音已停止，可上传转写。";
+        stream.getTracks().forEach(t => t.stop());
+      };
+
+      mediaRecorder.start();
+      btnStart.disabled = true;
+      btnStop.disabled = false;
+      btnUpload.disabled = true;
+      status.textContent = "录音中...";
+    };
+
+    btnStop.onclick = () => {
+      if (!mediaRecorder) return;
+      mediaRecorder.stop();
+      btnStart.disabled = false;
+      btnStop.disabled = true;
+    };
+
+    btnUpload.onclick = async () => {
+      if (!blob) return;
+
+      const apiBase = $("apiBase").value.replace(/\/$/, "");
+      const lang = $("lang").value || "zh";
+      const timestamps = $("timestamps").checked;
+      const vad = $("vad").checked;
+
+      const url = `${apiBase}/transcribe?language=${encodeURIComponent(lang)}&timestamps=${timestamps}&vad=${vad}`;
+      const form = new FormData();
+      form.append("file", blob, "recording.webm");
+
+      status.textContent = "上传中 / 转写中...";
+      btnUpload.disabled = true;
+
+      try {
+        const resp = await fetch(url, { method: "POST", body: form });
+        const data = await resp.json();
+        if (!data.ok) throw new Error(data.error || "Unknown error");
+        result.value = data.text || "";
+        status.textContent = `完成（识别语言: ${data.language}, 时长: ${Math.round(data.duration)}s）`;
+      } catch (e) {
+        console.error(e);
+        status.textContent = "失败：" + e.message;
+        btnUpload.disabled = false;
+      }
+    };
+  </script>
+</body>
+</html>
